@@ -401,14 +401,71 @@ def analyze_football(game: dict) -> dict | None:
 def analyze_basketball(game: dict) -> dict | None:
     home = game["home"]
     away = game["away"]
+    hs = game.get("home_stats", {})
+    as_ = game.get("away_stats", {})
+    h_stand = game.get("home_standing", {})
+    a_stand = game.get("away_standing", {})
 
-    analysis_lines = [
-        f"  • Partido: {home} (Local) vs {away} (Visitante)",
-        f"  • Liga: {game['league']}",
-        f"  • Ventaja de cancha local (~60% victorias en NBA/ligas top)",
-    ]
+    hw = hs.get("wins", 0) or 0
+    hl = hs.get("losses", 0) or 0
+    h_wr = hs.get("win_rate", 0.5) or 0.5
+    h_ppg = hs.get("avg_pts_for", 0) or 0
+    h_apg = hs.get("avg_pts_against", 0) or 0
 
-    confidence = 65
+    aw = as_.get("wins", 0) or 0
+    al = as_.get("losses", 0) or 0
+    a_wr = as_.get("win_rate", 0.5) or 0.5
+    a_ppg = as_.get("avg_pts_for", 0) or 0
+    a_apg = as_.get("avg_pts_against", 0) or 0
+
+    h_season_w = h_stand.get("won", 0) or 0
+    h_season_l = h_stand.get("lost", 0) or 0
+    a_season_w = a_stand.get("won", 0) or 0
+    a_season_l = a_stand.get("lost", 0) or 0
+
+    analysis_lines = []
+    if h_ppg or a_ppg:
+        analysis_lines.append(f"  • Forma reciente (últimos 10): {home} {hw}V/{hl}D | {away} {aw}V/{al}D")
+        analysis_lines.append(f"  • Puntos prom: {home} {h_ppg:.1f}F/{h_apg:.1f}C | {away} {a_ppg:.1f}F/{a_apg:.1f}C")
+    if h_season_w or a_season_w:
+        analysis_lines.append(f"  • Temporada: {home} {h_season_w}V/{h_season_l}D | {away} {a_season_w}V/{a_season_l}D")
+    analysis_lines.append(f"  • Ventaja de cancha local (~58% en ligas top)")
+
+    if not analysis_lines:
+        analysis_lines.append(f"  • {home} vs {away} — datos limitados")
+
+    score = 55
+    score += 5  # home court
+    if h_wr > a_wr + 0.10:
+        score += 10
+    elif a_wr > h_wr + 0.10:
+        score -= 8
+    if h_ppg > a_ppg + 5:
+        score += 5
+    elif a_ppg > h_ppg + 5:
+        score -= 4
+    if h_season_w > 0 and a_season_w > 0:
+        h_s_wr = h_season_w / max(h_season_w + h_season_l, 1)
+        a_s_wr = a_season_w / max(a_season_w + a_season_l, 1)
+        if h_s_wr > a_s_wr + 0.08:
+            score += 7
+        elif a_s_wr > h_s_wr + 0.08:
+            score -= 6
+
+    if score >= 58:
+        pick = f"Victoria {home} (Local)"
+        bet_type = "Resultado - Local gana"
+        odds_val = round(1.0 / max(h_wr + 0.05, 0.3), 2)
+    else:
+        pick = f"Victoria {away} (Visitante)"
+        bet_type = "Resultado - Visitante gana"
+        odds_val = round(1.0 / max(a_wr, 0.3) * 1.1, 2)
+        score = 100 - score
+
+    confidence = min(max(score, 60), 88)
+    if confidence < MIN_CONFIDENCE:
+        return None
+
     return {
         "sport": "basketball",
         "home": home,
@@ -416,9 +473,9 @@ def analyze_basketball(game: dict) -> dict | None:
         "league": game["league"],
         "time": game["time"],
         "analysis": "\n".join(analysis_lines),
-        "pick": f"Victoria {home} (Local)",
-        "bet_type": "Resultado - Local gana",
-        "odds": "1.85",
+        "pick": pick,
+        "bet_type": bet_type,
+        "odds": f"{odds_val:.2f}",
         "confidence": confidence,
         "injuries_note": "",
     }
@@ -429,14 +486,79 @@ def analyze_basketball(game: dict) -> dict | None:
 def analyze_baseball(game: dict) -> dict | None:
     home = game["home"]
     away = game["away"]
+    hs = game.get("home_stats", {})
+    as_ = game.get("away_stats", {})
+    h_stand = game.get("home_standing", {})
+    a_stand = game.get("away_standing", {})
 
-    analysis_lines = [
-        f"  • Partido: {home} (Local) vs {away} (Visitante)",
-        f"  • Liga: {game['league']}",
-        f"  • Ventaja local en béisbol (~54% históricamente)",
-    ]
+    hw = hs.get("wins", 0) or 0
+    hl = hs.get("losses", 0) or 0
+    h_wr = hs.get("win_rate", 0.5) or 0.5
+    h_rpg = hs.get("avg_runs_for", 0) or 0
+    h_rag = hs.get("avg_runs_against", 0) or 0
 
-    confidence = 66
+    aw = as_.get("wins", 0) or 0
+    al = as_.get("losses", 0) or 0
+    a_wr = as_.get("win_rate", 0.5) or 0.5
+    a_rpg = as_.get("avg_runs_for", 0) or 0
+    a_rag = as_.get("avg_runs_against", 0) or 0
+
+    h_season_w = h_stand.get("won", 0) or 0
+    h_season_l = h_stand.get("lost", 0) or 0
+    a_season_w = a_stand.get("won", 0) or 0
+    a_season_l = a_stand.get("lost", 0) or 0
+
+    analysis_lines = []
+    if h_rpg or a_rpg:
+        analysis_lines.append(f"  • Forma reciente (últimos 10): {home} {hw}V/{hl}D | {away} {aw}V/{al}D")
+        analysis_lines.append(f"  • Carreras prom: {home} {h_rpg:.1f}F/{h_rag:.1f}C | {away} {a_rpg:.1f}F/{a_rag:.1f}C")
+    if h_season_w or a_season_w:
+        analysis_lines.append(f"  • Temporada: {home} {h_season_w}V/{h_season_l}D | {away} {a_season_w}V/{a_season_l}D")
+    analysis_lines.append(f"  • Ventaja local histórica en béisbol (~54%)")
+
+    score = 52
+    score += 4  # home advantage
+    if h_wr > a_wr + 0.08:
+        score += 9
+    elif a_wr > h_wr + 0.08:
+        score -= 7
+    if h_rpg > a_rpg + 0.5:
+        score += 5
+    elif a_rpg > h_rpg + 0.5:
+        score -= 4
+    if h_season_w > 0 and a_season_w > 0:
+        h_s_wr = h_season_w / max(h_season_w + h_season_l, 1)
+        a_s_wr = a_season_w / max(a_season_w + a_season_l, 1)
+        if h_s_wr > a_s_wr + 0.06:
+            score += 6
+        elif a_s_wr > h_s_wr + 0.06:
+            score -= 5
+
+    total_avg_runs = h_rpg + a_rpg
+    if score >= 56:
+        pick = f"Victoria {home} (Local)"
+        bet_type = "Moneyline - Local gana"
+        odds_val = round(1.0 / max(h_wr + 0.04, 0.3), 2)
+    elif score <= 46:
+        pick = f"Victoria {away} (Visitante)"
+        bet_type = "Moneyline - Visitante gana"
+        odds_val = round(1.0 / max(a_wr, 0.3) * 1.08, 2)
+        score = 100 - score
+    elif total_avg_runs >= 9.0:
+        pick = "Más de 8.5 carreras"
+        bet_type = "Over/Under - Over 8.5"
+        odds_val = 1.90
+        score = 68
+    else:
+        pick = f"Victoria {home} (Local)"
+        bet_type = "Moneyline - Local gana"
+        odds_val = 1.82
+        score = 65
+
+    confidence = min(max(score, 60), 86)
+    if confidence < MIN_CONFIDENCE:
+        return None
+
     return {
         "sport": "baseball",
         "home": home,
@@ -444,8 +566,8 @@ def analyze_baseball(game: dict) -> dict | None:
         "league": game["league"],
         "time": game["time"],
         "analysis": "\n".join(analysis_lines),
-        "pick": f"Victoria {home} (Local)",
-        "bet_type": "Moneyline - Local gana",
+        "pick": pick,
+        "bet_type": bet_type,
         "odds": "1.80",
         "confidence": confidence,
         "injuries_note": "",
