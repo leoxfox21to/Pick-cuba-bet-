@@ -116,15 +116,17 @@ def format_picks_message(picks: list, sport_label: str) -> list[str]:
         emoji_conf = "🟢" if conf >= 75 else "🟡"
         sport_emoji = {"soccer": "⚽", "basketball": "🏀", "baseball": "⚾"}.get(pick['sport'], "🏆")
 
+        inj_line = f"{pick.get('injuries_note', '')}\n" if pick.get('injuries_note') else ""
         block = (
             f"{sport_emoji} *Partido {i}:* {pick['home']} vs {pick['away']}\n"
             f"🏆 Liga: {pick['league']}\n"
             f"🕐 Hora: {pick['time']} (Cuba)\n"
             f"{'─' * 28}\n"
             f"📊 *Análisis:*\n{pick['analysis']}\n\n"
+            f"{inj_line}"
             f"✅ *Pick Recomendada:* `{pick['pick']}`\n"
             f"💰 *Tipo de apuesta:* {pick['bet_type']}\n"
-            f"📈 *Cuota estimada:* {pick['odds']}\n"
+            f"📈 *Cuota real mercado:* {pick['odds']}\n"
             f"{emoji_conf} *Confianza:* {conf}%\n\n"
         )
 
