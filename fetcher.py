@@ -451,6 +451,10 @@ async def get_baseball_games(session: aiohttp.ClientSession, date: str):
 
 # ─── MAIN FETCH ─────────────────────────────────────────────────────────────
 
+async def _empty() -> list:
+    return []
+
+
 async def fetch_all_games(sport_filter: str = None):
     today = get_today_cuba()
     games = []
@@ -458,20 +462,9 @@ async def fetch_all_games(sport_filter: str = None):
     async with aiohttp.ClientSession() as session:
         tasks = []
 
-        if sport_filter is None or sport_filter == "soccer":
-            tasks.append(get_football_fixtures(session, today))
-        else:
-            tasks.append(asyncio.coroutine(lambda: [])())
-
-        if sport_filter is None or sport_filter == "basketball":
-            tasks.append(get_basketball_games(session, today))
-        else:
-            tasks.append(asyncio.coroutine(lambda: [])())
-
-        if sport_filter is None or sport_filter == "baseball":
-            tasks.append(get_baseball_games(session, today))
-        else:
-            tasks.append(asyncio.coroutine(lambda: [])())
+        tasks.append(get_football_fixtures(session, today) if (sport_filter is None or sport_filter == "soccer") else _empty())
+        tasks.append(get_basketball_games(session, today) if (sport_filter is None or sport_filter == "basketball") else _empty())
+        tasks.append(get_baseball_games(session, today) if (sport_filter is None or sport_filter == "baseball") else _empty())
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
