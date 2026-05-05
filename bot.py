@@ -103,42 +103,50 @@ async def picks_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 def format_picks_message(picks: list, sport_label: str) -> list[str]:
     now_cuba = datetime.now(CUBA_TZ)
+
+    # Primer mensaje: resumen/cabecera
     header = (
-        f"🎯 *PICKS DEL DÍA - {sport_label}*\n"
+        f"🎯 *PICKS DEL DÍA — {sport_label}*\n"
         f"📅 {now_cuba.strftime('%d/%m/%Y %H:%M')} (Hora Cuba)\n"
-        f"{'─' * 32}\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"📌 *{len(picks)} pick(s) recomendada(s)*\n\n"
     )
 
-    messages = []
-    current = header
+    sport_counts = {}
+    for p in picks:
+        sport_counts[p['sport']] = sport_counts.get(p['sport'], 0) + 1
+    for sport, count in sport_counts.items():
+        emoji = {"soccer": "⚽", "basketball": "🏀", "baseball": "⚾"}.get(sport, "🏆")
+        header += f"  {emoji} {sport.capitalize()}: {count}\n"
+
+    header += "\n_Cada pick llega en mensaje separado_ 👇"
+    messages = [header]
+
+    # Un mensaje por pick
     for i, pick in enumerate(picks, 1):
         conf = pick['confidence']
         emoji_conf = "🟢" if conf >= 75 else "🟡"
         sport_emoji = {"soccer": "⚽", "basketball": "🏀", "baseball": "⚾"}.get(pick['sport'], "🏆")
+        inj_line = f"\n{pick.get('injuries_note', '')}" if pick.get('injuries_note') else ""
 
-        inj_line = f"{pick.get('injuries_note', '')}\n" if pick.get('injuries_note') else ""
-        block = (
-            f"{sport_emoji} *Partido {i}:* {pick['home']} vs {pick['away']}\n"
-            f"🏆 Liga: {pick['league']}\n"
-            f"🕐 Hora: {pick['time']} (Cuba)\n"
-            f"{'─' * 28}\n"
-            f"📊 *Análisis:*\n{pick['analysis']}\n\n"
-            f"{inj_line}"
-            f"✅ *Pick Recomendada:* `{pick['pick']}`\n"
-            f"💰 *Tipo de apuesta:* {pick['bet_type']}\n"
-            f"📈 *Cuota real mercado:* {pick['odds']}\n"
-            f"{emoji_conf} *Confianza:* {conf}%\n\n"
+        msg = (
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"{sport_emoji} *PICK #{i}*\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"🆚 *{pick['home']}* vs *{pick['away']}*\n"
+            f"🏆 {pick['league']}\n"
+            f"🕐 {pick['time']} (hora Cuba)\n\n"
+            f"📊 *Análisis:*\n{pick['analysis']}"
+            f"{inj_line}\n\n"
+            f"┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n"
+            f"✅ *Pick:* `{pick['pick']}`\n"
+            f"💰 *Apuesta:* {pick['bet_type']}\n"
+            f"📈 *Cuota:* {pick['odds']}\n"
+            f"{emoji_conf} *Confianza:* {conf}%\n"
+            f"┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄\n"
+            f"⚠️ _Análisis estadístico. Apuesta con responsabilidad._"
         )
-
-        if len(current) + len(block) > 4000:
-            messages.append(current)
-            current = block
-        else:
-            current += block
-
-    if current.strip():
-        current += "\n⚠️ _Análisis estadístico. Apuesta con responsabilidad._"
-        messages.append(current)
+        messages.append(msg)
 
     return messages
 
