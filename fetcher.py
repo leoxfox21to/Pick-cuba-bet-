@@ -112,9 +112,13 @@ async def bulk_get_basketball(session: aiohttp.ClientSession, date: str) -> list
             "sport": "basketball",
             "fixture_id": g["id"],
             "home": g["teams"]["home"]["name"],
+            "home_id": g["teams"]["home"]["id"],
             "away": g["teams"]["visitors"]["name"],
+            "away_id": g["teams"]["visitors"]["id"],
             "league": g["league"]["name"],
-            "time": (g["date"].get("start") or "")[ 11:16],
+            "league_id": g["league"]["id"],
+            "season": str(g["league"].get("season", "")),
+            "time": (g["date"].get("start") or "")[11:16],
             "priority": 50,
         })
     logger.info(f"Baloncesto: {len(games)} partidos encontrados")
@@ -135,13 +139,163 @@ async def bulk_get_baseball(session: aiohttp.ClientSession, date: str) -> list:
             "sport": "baseball",
             "fixture_id": g["id"],
             "home": g["teams"]["home"]["name"],
+            "home_id": g["teams"]["home"]["id"],
             "away": g["teams"]["away"]["name"],
+            "away_id": g["teams"]["away"]["id"],
             "league": g["league"]["name"],
+            "league_id": g["league"]["id"],
+            "season": str(g["league"].get("season", "")),
             "time": (g.get("date") or "")[11:16],
             "priority": 45,
         })
     logger.info(f"Béisbol: {len(games)} partidos encontrados")
     return games
+
+
+async def _sport_recent_games(session, team_id: int, season: str, base_url: str, headers: dict) -> list:
+    data = await fetch_json(
+        session, f"{base_url}/games", headers,
+        {"team": team_id, "season": season, "last": 10}
+    )
+    if not data or not data.get("response"):
+        return []
+    return data["response"]
+
+
+async def _sport_standings(session, league_id: int, season: str, base_url: str, headers: dict) -> list:
+    data = await fetch_json(
+        session, f"{base_url}/standings", headers,
+        {"league": league_id, "season": season}
+    )
+    if not data or not data.get("response"):
+        return []
+    return data["response"]
+
+
+async def deep_analyze_baseball(session: aiohttp.ClientSession, game: dict) -> dict:
+    home_id = game["home_id"]
+    away_id = game["away_id"]
+    league_id = game["league_id"]
+    season = game["season"]
+
+    home_games, away_games, standings = await asyncio.gather(
+        _sport_recent_games(session, home_id, season, API_BASEBALL_BASE, HEADERS_BASEBALL),
+        _sport_recent_games(session, away_id, season, API_BASEBALL_BASE, HEADERS_BASEBALL),
+        _sport_standings(session, league_id, season, API_BASEBALL_BASE, HEADERS_BASEBALL),
+    )
+
+    def parse_baseball_form(games, team_id):
+        wins, losses, runs_for, runs_against = 0, 0, 0, 0
+        for g in games:
+            h_id = g["teams"]["home"]["id"]
+            a_id = g["teams"]["away"]["id"]
+            h_score = (g.get("scores", {}).get("home", {}).get("total") or 0)
+            a_score = (g.get("scores", {}).get("away", {}).get("total") or 0)
+            if h_id == team_id:
+                runs_for += h_score
+                runs_against += a_score
+                if h_score > a_score:
+                    wins += 1
+                else:
+                    losses += 1
+            elif a_id == team_id:
+                runs_for += a_score
+                runs_against += h_score
+                if a_score > h_score:
+                    wins += 1
+                else:
+                    losses += 1
+        total = max(wins + losses, 1)
+        return {
+            "wins": wins, "losses": losses,
+            "win_rate": round(wins / total, 3),
+            "avg_runs_for": round(runs_for / total, 2),
+            "avg_runs_against": round(runs_against / total, 2),
+        }
+
+    def find_standing(standings_data, team_id):
+        for group in standings_data:
+            for entry in (group if isinstance(group, list) else [group]):
+                t = entry.get("team", {})
+                if t.get("id") == team_id:
+                    return entry
+        return {}
+
+    home_stats = parse_baseball_form(home_games, home_id)
+    away_stats = parse_baseball_form(away_games, away_id)
+    home_standing = find_standing(standings, home_id)
+    away_standing = find_standing(standings, away_id)
+
+    return {
+        **game,
+        "home_stats": home_stats,
+        "away_stats": away_stats,
+        "home_standing": home_standing,
+        "away_standing": away_standing,
+    }
+
+
+async def deep_analyze_basketball(session: aiohttp.ClientSession, game: dict) -> dict:
+    home_id = game["home_id"]
+    away_id = game["away_id"]
+    league_id = game["league_id"]
+    season = game["season"]
+
+    home_games, away_games, standings = await asyncio.gather(
+        _sport_recent_games(session, home_id, season, API_BASKETBALL_BASE, HEADERS_BASKETBALL),
+        _sport_recent_games(session, away_id, season, API_BASKETBALL_BASE, HEADERS_BASKETBALL),
+        _sport_standings(session, league_id, season, API_BASKETBALL_BASE, HEADERS_BASKETBALL),
+    )
+
+    def parse_basketball_form(games, team_id):
+        wins, losses, pts_for, pts_against = 0, 0, 0, 0
+        for g in games:
+            h_id = g["teams"]["home"]["id"]
+            v_id = g["teams"]["visitors"]["id"]
+            h_score = (g.get("scores", {}).get("home", {}).get("total") or 0)
+            v_score = (g.get("scores", {}).get("visitors", {}).get("total") or 0)
+            if h_id == team_id:
+                pts_for += h_score
+                pts_against += v_score
+                if h_score > v_score:
+                    wins += 1
+                else:
+                    losses += 1
+            elif v_id == team_id:
+                pts_for += v_score
+                pts_against += h_score
+                if v_score > h_score:
+                    wins += 1
+                else:
+                    losses += 1
+        total = max(wins + losses, 1)
+        return {
+            "wins": wins, "losses": losses,
+            "win_rate": round(wins / total, 3),
+            "avg_pts_for": round(pts_for / total, 1),
+            "avg_pts_against": round(pts_against / total, 1),
+        }
+
+    def find_standing(standings_data, team_id):
+        for group in standings_data:
+            for entry in (group if isinstance(group, list) else [group]):
+                t = entry.get("team", {})
+                if t.get("id") == team_id:
+                    return entry
+        return {}
+
+    home_stats = parse_basketball_form(home_games, home_id)
+    away_stats = parse_basketball_form(away_games, away_id)
+    home_standing = find_standing(standings, home_id)
+    away_standing = find_standing(standings, away_id)
+
+    return {
+        **game,
+        "home_stats": home_stats,
+        "away_stats": away_stats,
+        "home_standing": home_standing,
+        "away_standing": away_standing,
+    }
 
 
 # ══════════════════════════════════════════════════════════════
@@ -476,21 +630,20 @@ async def fetch_all_games(sport_filter: str = None) -> list:
         total_found = len(all_fixtures)
         logger.info(f"Total partidos cargados: {total_found}")
 
-        # ── FASE 2: seleccionar top N para análisis profundo ──────
-        soccer_top = [f for f in all_fixtures if f["sport"] == "soccer"][:MAX_DEEP_FIXTURES]
-        other = [f for f in all_fixtures if f["sport"] != "soccer"]
+        # ── FASE 2: seleccionar top N por deporte ─────────────────
+        soccer_top      = [f for f in all_fixtures if f["sport"] == "soccer"][:MAX_DEEP_FIXTURES]
+        basketball_top  = [f for f in all_fixtures if f["sport"] == "basketball"][:5]
+        baseball_top    = [f for f in all_fixtures if f["sport"] == "baseball"][:5]
 
-        # ── FASE 3: análisis profundo por fixture_id ──────────────
-        deep_tasks = [deep_analyze_fixture(session, f) for f in soccer_top]
-        deep_results = await asyncio.gather(*deep_tasks, return_exceptions=True)
+        # ── FASE 3: análisis profundo de todos los deportes ───────
+        all_deep_tasks = (
+            [deep_analyze_fixture(session, f)    for f in soccer_top] +
+            [deep_analyze_basketball(session, f) for f in basketball_top] +
+            [deep_analyze_baseball(session, f)   for f in baseball_top]
+        )
+        deep_results = await asyncio.gather(*all_deep_tasks, return_exceptions=True)
 
-        final = []
-        for r in deep_results:
-            if isinstance(r, dict):
-                final.append(r)
-
-        for f in other:
-            final.append(f)
+        final = [r for r in deep_results if isinstance(r, dict)]
 
     logger.info(f"Análisis profundo completado: {len(final)} partidos")
     return final
